@@ -1,4 +1,5 @@
-﻿const TelegramBot = require('node-telegram-bot-api');
+﻿const { Alchemy, Network, Wallet } = require('alchemy-sdk');
+const TelegramBot = require('node-telegram-bot-api');
 require('dotenv').config();
 
 // Initialize Telegram bot
@@ -17,6 +18,14 @@ const ADMIN_ID = 6686791215;
 function isValidWallet(walletAddress) {
     return /^0x[a-fA-F0-9]{40}$/.test(walletAddress); // Must start with 0x and be 42 characters long
 }
+
+// Initialize Alchemy (mocked for now)
+const alchemySettings = {
+    apiKey: process.env.ALCHEMY_API_KEY,
+    network: Network.MATIC_MAINNET,
+};
+
+const alchemy = new Alchemy(alchemySettings);
 
 // Handle '/start' command
 bot.onText(/\/start/, (msg) => {
@@ -49,13 +58,10 @@ bot.on('callback_query', (query) => {
     const userId = query.from.id;
     const data = query.data;
 
-    // Check if the user has set a wallet address
     if (data === 'withdraw') {
-        // Admin can withdraw anytime
+        // Admin and user check
         if (userId === ADMIN_ID) {
-            bot.sendMessage(chatId, 'Admin can withdraw anytime. Proceeding with withdrawal...');
-            // Add logic for admin withdrawal here if needed
-            return;
+            bot.sendMessage(chatId, 'Admin, please follow the same withdrawal process as other users.');
         }
 
         // Check if the user has set a wallet address
@@ -142,9 +148,19 @@ bot.on('callback_query', (query) => {
     if (data === 'confirm_withdraw') {
         // Proceed with withdrawal logic here
         const balance = userData[userId].balance;
-        userData[userId].balance = 0; // Reset balance after withdrawal
 
-        bot.sendMessage(chatId, `Your withdrawal of ${balance} CWAVE has been processed. Your new balance is 0 CWAVE.`);
+        // Simulate withdrawal logic here (e.g., interact with Alchemy or your contract)
+        // For now, we'll mock a successful transaction
+        const withdrawalAmount = balance;
+
+        // Reset balance after withdrawal
+        userData[userId].balance = 0;
+
+        bot.sendMessage(chatId, `Your withdrawal of ${withdrawalAmount} CWAVE has been processed. Your new balance is 0 CWAVE.`);
+
+        // Here you would integrate with your contract to process the actual withdrawal
+        // Use Alchemy or any other API for transaction processing
+
     } else if (data === 'reject_withdraw') {
         // Reject withdrawal and return to main menu
         bot.sendMessage(chatId, 'Withdrawal rejected. Returning to main menu.');
@@ -168,11 +184,9 @@ bot.onText(/\/withdraw/, (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
 
-    // Admin can withdraw anytime
+    // Admin can withdraw anytime but still goes through the withdrawal flow
     if (userId === ADMIN_ID) {
-        bot.sendMessage(chatId, 'Admin can withdraw anytime. Proceeding with withdrawal...');
-        // Admin withdrawal logic goes here
-        return;
+        bot.sendMessage(chatId, 'Admin, please follow the same withdrawal process as other users.');
     }
 
     // Check if the user has set a wallet address
