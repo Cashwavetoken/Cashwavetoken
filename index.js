@@ -16,7 +16,13 @@ const alchemyUrl = process.env.ALCHEMY_URL;
 
 // Validate environment variables
 if (!token || !alchemyApiKey || !walletAddress || !privateKey || !contractAddress || !alchemyUrl) {
-    console.error('Please ensure all environment variables are set in Heroku.');
+    console.error('Error: Please ensure the following environment variables are set in Heroku:');
+    if (!token) console.error('TELEGRAM_BOT_TOKEN');
+    if (!alchemyApiKey) console.error('ALCHEMY_API_KEY');
+    if (!walletAddress) console.error('WALLET_ADDRESS');
+    if (!privateKey) console.error('PRIVATE_KEY');
+    if (!contractAddress) console.error('CONTRACT_ADDRESS');
+    if (!alchemyUrl) console.error('ALCHEMY_URL');
     process.exit(1);
 }
 
@@ -64,6 +70,7 @@ bot.onText(/\/start/, (msg) => {
                 [{ text: '💸 Withdraw', callback_data: 'withdraw' }],
                 [{ text: '👥 Referrals', callback_data: 'referrals' }],
                 [{ text: '🔗 Invite Link', callback_data: 'invite_link' }]
+            ]
         }
     };
     bot.sendMessage(chatId, 'Choose an option:', inlineKeyboard);
