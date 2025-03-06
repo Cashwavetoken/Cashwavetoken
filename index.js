@@ -1,7 +1,10 @@
 const { Alchemy, Network, Wallet, Utils } = require('alchemy-sdk');
 const TelegramBot = require('node-telegram-bot-api');
-const ethers = require('ethers');
+const express = require('express'); // Added express for server setup
 require('dotenv').config();
+
+// Initialize express app
+const app = express();
 
 // Weka vigezo kutoka kwenye mazingira ya Heroku
 const token = process.env.TELEGRAM_BOT_TOKEN;
