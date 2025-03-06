@@ -41,7 +41,7 @@ const alchemy = new Alchemy(settings);
 // Initialize wallet
 const wallet = new Wallet(privateKey, alchemy);
 
-// Store user data (wallet addresses and balances)
+// Store user data (wallet addresses, referrals, and balances)
 const userData = {};
 
 // Admin ID (replace with your Telegram ID)
@@ -61,6 +61,20 @@ bot.onText(/\/start/, (msg) => {
 
     // Notify admin about new user
     bot.sendMessage(ADMIN_ID, `New user joined:\nID: ${userId}\nUsername: @${username}`);
+
+    // Check if the user came through a referral link
+    const referrerId = msg.text.split('start=')[1]; // Extract the referrer ID from the invite link
+    if (referrerId && referrerId !== userId.toString()) {
+        // Award the referrer with 150 CWAVE
+        if (!userData[referrerId]) {
+            userData[referrerId] = {};
+        }
+        // Add 150 CWAVE to the referrer's balance
+        userData[referrerId].balance = (userData[referrerId].balance || 0) + 150;
+        
+        // Notify referrer about the reward
+        bot.sendMessage(referrerId, 'New user joined! You received 150 CWAVE for the referral.');
+    }
 
     // Send inline keyboard
     const inlineKeyboard = {
@@ -86,15 +100,12 @@ bot.on('callback_query', (query) => {
 
     if (data === 'balance') {
         // Check user's balance
-        alchemy.core.getTokenBalances(walletAddress, [contractAddress]).then((response) => {
-            console.log('Alchemy response:', response);
-            const balance = response.tokenBalances[0].tokenBalance;
-            const formattedBalance = balance / 1e18; // Adjust for token decimals
-            bot.sendMessage(chatId, `Your balance: ${formattedBalance} tokens`);
-        }).catch((err) => {
-            console.error('Alchemy error:', err);
-            bot.sendMessage(chatId, 'Failed to fetch balance. Please try again later.');
-        });
+        if (!userData[userId] || !userData[userId].balance) {
+            bot.sendMessage(chatId, 'You don\'t have a balance yet.');
+            return;
+        }
+        const balance = userData[userId].balance;
+        bot.sendMessage(chatId, `Your balance: ${balance} CWAVE`);
     } else if (data === 'withdraw') {
         // Check if user has set a wallet
         if (!userData[userId] || !userData[userId].wallet) {
@@ -103,38 +114,30 @@ bot.on('callback_query', (query) => {
         }
 
         // Check balance and withdrawal
-        alchemy.core.getTokenBalances(userData[userId].wallet, [contractAddress]).then((response) => {
-            const balance = response.tokenBalances[0].tokenBalance;
-            const formattedBalance = balance / 1e18; // Adjust for token decimals
+        if (!userData[userId] || !userData[userId].balance || userData[userId].balance < 1500) {
+            bot.sendMessage(chatId, 'Low balance. Minimum withdrawal is 1500 CWAVE.');
+            return;
+        }
 
-            if (formattedBalance < 1500) {
-                bot.sendMessage(chatId, 'Low balance. Minimum withdrawal is 1500 tokens.');
+        // Prompt user to enter withdrawal amount
+        bot.sendMessage(chatId, 'Enter the amount you want to withdraw:');
+        bot.once('message', (msg) => {
+            const amount = parseFloat(msg.text);
+            if (isNaN(amount) || amount < 1500) {
+                bot.sendMessage(chatId, 'Invalid amount. Please enter a valid number with a minimum of 1500 CWAVE.');
                 return;
             }
 
-            // Prompt user to enter withdrawal amount
-            bot.sendMessage(chatId, 'Enter the amount you want to withdraw:');
-            bot.once('message', (msg) => {
-                const amount = parseFloat(msg.text);
-                if (isNaN(amount) || amount < 1500) {
-                    bot.sendMessage(chatId, 'Invalid amount. Please enter a valid number with a minimum of 1500 tokens.');
-                    return;
-                }
-
-                // Process withdrawal here (integrate Alchemy's contract API to send tokens)
-                bot.sendMessage(chatId, `Withdrawal request for ${amount} tokens has been received. Processing withdrawal...`);
-                
-                // Implement actual token transfer logic (placeholder)
-                // Example logic for token transfer using Alchemy's SDK (this part will depend on your contract)
-                // bot.sendMessage(chatId, 'Withdrawal complete!');
-            });
-        }).catch((err) => {
-            console.error('Alchemy error:', err);
-            bot.sendMessage(chatId, 'Failed to fetch balance. Please try again later.');
+            // Process withdrawal here (integrate Alchemy's contract API to send tokens)
+            bot.sendMessage(chatId, `Withdrawal request for ${amount} CWAVE tokens has been received. Processing withdrawal...`);
+            
+            // Example logic for token transfer using Alchemy's SDK (this part will depend on your contract)
+            // bot.sendMessage(chatId, 'Withdrawal complete!');
         });
     } else if (data === 'referrals') {
         // Show referral count (placeholder)
-        bot.sendMessage(chatId, 'You have 0 referrals.');
+        const referralsCount = Object.values(userData).filter(user => user.referrerId === userId).length;
+        bot.sendMessage(chatId, `You have ${referralsCount} referrals.`);
     } else if (data === 'invite_link') {
         // Generate and send unique invite link
         const inviteLink = generateInviteLink(userId);
@@ -174,28 +177,6 @@ bot.on('callback_query', (query) => {
             bot.sendMessage(chatId, 'Wallet address set. Choose an option:', inlineKeyboard);
         });
     }
-});
-
-// Set wallet command
-bot.onText(/\/setwallet (.+)/, (msg, match) => {
-    console.log('Received /setwallet command');
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const walletAddress = match[1];
-
-    // Validate wallet address (basic check)
-    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-        bot.sendMessage(chatId, 'Invalid wallet address. Please provide a valid Polygon Matic or Ethereum wallet address.');
-        return;
-    }
-
-    // Save wallet address
-    if (!userData[userId]) {
-        userData[userId] = {};
-    }
-    userData[userId].wallet = walletAddress;
-
-    bot.sendMessage(chatId, `Wallet address set successfully: ${walletAddress}`);
 });
 
 // Start server
