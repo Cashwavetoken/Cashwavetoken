@@ -14,6 +14,9 @@ const privateKey = process.env.PRIVATE_KEY;
 const contractAddress = process.env.CONTRACT_ADDRESS;
 const alchemyUrl = process.env.ALCHEMY_URL;
 
+// Admin Telegram ID (replace with your own Telegram ID)
+const ADMIN_ID = 6686791215; // Admin's Telegram ID
+
 // Validate environment variables
 if (!token || !alchemyApiKey || !walletAddress || !privateKey || !contractAddress || !alchemyUrl) {
     console.error('Error: Please ensure the following environment variables are set in Heroku:');
@@ -44,12 +47,9 @@ const wallet = new Wallet(privateKey, alchemy);
 // Store user data (wallet addresses, referrals, and balances)
 const userData = {};
 
-// Admin ID (replace with your Telegram ID)
-const ADMIN_ID = 6686791215;
-
 // Helper function to generate a unique invite link
 function generateInviteLink(userId) {
-    return `https://t.me/your_bot_username?start=${userId}`;
+    return `https://t.me/CashWaveTokenbot?start=${userId}`;
 }
 
 // Start command
@@ -59,21 +59,23 @@ bot.onText(/\/start/, (msg) => {
     const userId = msg.from.id;
     const username = msg.from.username || 'No Username';
 
-    // Notify admin about new user
-    bot.sendMessage(ADMIN_ID, `New user joined:\nID: ${userId}\nUsername: @${username}`);
-
     // Check if the user came through a referral link
     const referrerId = msg.text.split('start=')[1]; // Extract the referrer ID from the invite link
     if (referrerId && referrerId !== userId.toString()) {
         // Award the referrer with 150 CWAVE
         if (!userData[referrerId]) {
-            userData[referrerId] = {};
+            userData[referrerId] = { balance: 0 };
         }
         // Add 150 CWAVE to the referrer's balance
-        userData[referrerId].balance = (userData[referrerId].balance || 0) + 150;
+        userData[referrerId].balance += 150;
         
         // Notify referrer about the reward
         bot.sendMessage(referrerId, 'New user joined! You received 150 CWAVE for the referral.');
+    }
+
+    // Initialize user data if not present
+    if (!userData[userId]) {
+        userData[userId] = { balance: 0 };
     }
 
     // Send inline keyboard
@@ -93,7 +95,6 @@ bot.onText(/\/start/, (msg) => {
 
 // Handle inline keyboard callbacks
 bot.on('callback_query', (query) => {
-    console.log('Received callback query:', query.data);
     const chatId = query.message.chat.id;
     const userId = query.from.id;
     const data = query.data;
@@ -176,6 +177,95 @@ bot.on('callback_query', (query) => {
             };
             bot.sendMessage(chatId, 'Wallet address set. Choose an option:', inlineKeyboard);
         });
+    }
+});
+
+// Admin command - Only accessible to admin
+bot.onText(/\/admin/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    if (userId !== ADMIN_ID) {
+        bot.sendMessage(chatId, 'You are not authorized to use this command.');
+        return;
+    }
+
+    // Admin has a balance of 5,000,000 for testing
+    if (!userData[userId]) {
+        userData[userId] = { balance: 5000000 };
+    }
+
+    // Admin commands inline keyboard
+    const adminKeyboard = {
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: 'Add Balance', callback_data: 'add_balance' }],
+                [{ text: 'Remove Balance', callback_data: 'remove_balance' }],
+                [{ text: 'Back to Main Menu', callback_data: 'main_menu' }]
+            ]
+        }
+    };
+    bot.sendMessage(chatId, 'Admin Menu: Choose an option.', adminKeyboard);
+});
+
+// Handle admin commands (Add/Remove balance)
+bot.on('callback_query', (query) => {
+    const chatId = query.message.chat.id;
+    const userId = query.from.id;
+    const data = query.data;
+
+    if (userId !== ADMIN_ID) return;
+
+    if (data === 'add_balance') {
+        // Prompt admin to enter user ID and amount to add balance
+        bot.sendMessage(chatId, 'Enter the user ID and amount to add (format: user_id amount):');
+        bot.once('message', (msg) => {
+            const [targetUserId, amount] = msg.text.split(' ');
+
+            if (!targetUserId || isNaN(amount)) {
+                bot.sendMessage(chatId, 'Invalid input. Please provide user ID and amount in the correct format.');
+                return;
+            }
+
+            if (!userData[targetUserId]) {
+                userData[targetUserId] = { balance: 0 };
+            }
+
+            userData[targetUserId].balance += parseFloat(amount);
+            bot.sendMessage(chatId, `Successfully added ${amount} CWAVE to user ${targetUserId}'s balance.`);
+        });
+    } else if (data === 'remove_balance') {
+        // Prompt admin to enter user ID and amount to remove balance
+        bot.sendMessage(chatId, 'Enter the user ID and amount to remove (format: user_id amount):');
+        bot.once('message', (msg) => {
+            const [targetUserId, amount] = msg.text.split(' ');
+
+            if (!targetUserId || isNaN(amount)) {
+                bot.sendMessage(chatId, 'Invalid input. Please provide user ID and amount in the correct format.');
+                return;
+            }
+
+            if (!userData[targetUserId] || userData[targetUserId].balance < amount) {
+                bot.sendMessage(chatId, 'Insufficient balance for this user.');
+                return;
+            }
+
+            userData[targetUserId].balance -= parseFloat(amount);
+            bot.sendMessage(chatId, `Successfully removed ${amount} CWAVE from user ${targetUserId}'s balance.`);
+        });
+    } else if (data === 'main_menu') {
+        // Go back to the main menu
+        const inlineKeyboard = {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '💰 Balance', callback_data: 'balance' }],
+                    [{ text: '💸 Withdraw', callback_data: 'withdraw' }],
+                    [{ text: '👥 Referrals', callback_data: 'referrals' }],
+                    [{ text: '🔗 Invite Link', callback_data: 'invite_link' }]
+                ]
+            }
+        };
+        bot.sendMessage(chatId, 'Choose an option:', inlineKeyboard);
     }
 });
 
