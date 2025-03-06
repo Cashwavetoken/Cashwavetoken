@@ -35,7 +35,7 @@ const alchemy = new Alchemy(settings);
 // Initialize wallet
 const wallet = new Wallet(privateKey, alchemy);
 
-// Store user data (wallet addresses and balances)
+// Store user data (wallet addresses, balances, etc.)
 const userData = {};
 
 // Admin ID (replace with your Telegram ID)
@@ -56,7 +56,7 @@ bot.onText(/\/start/, (msg) => {
     // Notify admin about new user
     bot.sendMessage(ADMIN_ID, `New user joined:\nID: ${userId}\nUsername: @${username}`);
 
-    // Check if user exists, otherwise initialize
+    // Initialize user data if not present
     if (!userData[userId]) {
         userData[userId] = { balance: 0, referrals: 0, wallet: null, allowWithdrawal: false };
     }
@@ -77,109 +77,92 @@ bot.onText(/\/start/, (msg) => {
     bot.sendMessage(chatId, 'Welcome! Please choose an option:', inlineKeyboard);
 });
 
-// Handle inline keyboard callbacks for normal users
+// Handle inline keyboard callbacks
 bot.on('callback_query', (query) => {
-    console.log('Received callback query:', query.data);
     const chatId = query.message.chat.id;
     const userId = query.from.id;
     const data = query.data;
 
     if (data === 'balance') {
-        // Check user's balance
-        const balance = userData[userId].balance;
+        // Show balance to the user
+        const balance = userData[userId]?.balance || 0;
         bot.sendMessage(chatId, `Your balance: ${balance} CWAVE`);
     } else if (data === 'withdraw') {
-        // Check if user has set a wallet
-        if (!userData[userId].wallet) {
-            bot.sendMessage(chatId, 'You need to set your wallet address first. Use /set_wallet to set your Polygon Matic or Ethereum wallet.');
+        // Prompt the user to set wallet if they haven't set it
+        if (!userData[userId]?.wallet) {
+            bot.sendMessage(chatId, 'Please set your wallet address first. Use /setwallet command.');
             return;
         }
 
-        // Check user's balance
-        const balance = userData[userId].balance;
-        if (balance < 1500) {
-            bot.sendMessage(chatId, 'Minimum withdrawal is 1500 CWAVE. Keep inviting friends to earn more!');
+        // Check if the balance is sufficient for withdrawal
+        if (userData[userId]?.balance < 1500) {
+            bot.sendMessage(chatId, 'Minimum withdrawal is 1500 CWAVE. Please earn more tokens to withdraw.');
             return;
         }
 
-        // Ask for confirmation of withdrawal
-        bot.sendMessage(chatId, `Your balance is ${balance} CWAVE. Proceed with withdrawal?`, {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'Confirm Withdrawal', callback_data: 'confirm_withdraw' }],
-                    [{ text: 'Cancel', callback_data: 'cancel_withdraw' }]
-                ]
-            }
-        });
-    } else if (data === 'set_wallet') {
-        // Ask user to input wallet address
-        bot.sendMessage(chatId, 'Please enter your Polygon/Ethereum wallet address (starts with 0x and 42 characters long):');
-        bot.once('message', (msg) => {
-            const walletAddress = msg.text.trim();
-
-            // Validate wallet address (basic check)
-            if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-                bot.sendMessage(chatId, 'Invalid wallet address. Please provide a valid Polygon Matic or Ethereum wallet address.');
-                return;
-            }
-
-            // Save wallet address
-            userData[userId].wallet = walletAddress;
-
-            bot.sendMessage(chatId, 'Wallet successfully saved for future withdrawals!');
-        });
+        // Proceed with withdrawal (dummy logic for now)
+        bot.sendMessage(chatId, 'Proceeding with withdrawal...');
+    } else if (data === 'referrals') {
+        // Show referral count (placeholder)
+        bot.sendMessage(chatId, 'You have 0 referrals.');
     } else if (data === 'invite_link') {
         // Generate and send unique invite link
         const inviteLink = generateInviteLink(userId);
         bot.sendMessage(chatId, `Your unique invite link: ${inviteLink}`);
+    } else if (data === 'set_wallet') {
+        // Request wallet address
+        bot.sendMessage(chatId, 'Please enter your Polygon/Ethereum wallet address (starts with 0x and 64 characters long).');
     }
 });
 
-// Handle withdrawal confirmation and execute the withdrawal
-bot.on('callback_query', (query) => {
-    const chatId = query.message.chat.id;
-    const userId = query.from.id;
-    const data = query.data;
+// Set wallet command
+bot.onText(/\/setwallet (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const walletAddress = match[1];
 
-    if (data === 'confirm_withdraw') {
-        // Check if user has sufficient balance
-        const balance = userData[userId].balance;
-        if (balance >= 1500) {
-            // Perform withdrawal logic here
-            bot.sendMessage(chatId, 'Withdrawal has been processed successfully.');
-            userData[userId].balance -= 1500; // Deduct the withdrawn amount
-        } else {
-            bot.sendMessage(chatId, 'Minimum withdrawal is 1500 CWAVE. Keep inviting friends to earn more!');
-        }
-    } else if (data === 'cancel_withdraw') {
-        bot.sendMessage(chatId, 'Withdrawal cancelled.');
+    // Validate wallet address format (starts with 0x and 64 characters)
+    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+        bot.sendMessage(chatId, 'Invalid wallet address. Please provide a valid Polygon Matic or Ethereum wallet address.');
+        return;
     }
+
+    // Save wallet address
+    if (!userData[userId]) {
+        userData[userId] = { balance: 0, referrals: 0, wallet: null, allowWithdrawal: false };
+    }
+    userData[userId].wallet = walletAddress;
+
+    bot.sendMessage(chatId, `Wallet address saved successfully: ${walletAddress}`);
 });
 
-// Admin Command: Set balance, withdraw, remove balance, and more
+// Admin Commands
 bot.onText(/\/admin/, (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
 
+    // Only allow admin to access this command
     if (userId !== ADMIN_ID) {
-        bot.sendMessage(chatId, 'You are not authorized to use admin commands.');
+        bot.sendMessage(chatId, 'You are not authorized to use this command.');
         return;
     }
 
-    // Admin-specific actions (add/remove balance, approve withdrawals, etc.)
-    const inlineKeyboard = {
+    // Admin command options
+    const adminInlineKeyboard = {
         reply_markup: {
             inline_keyboard: [
                 [{ text: 'Add Balance to User', callback_data: 'add_balance' }],
                 [{ text: 'Remove Balance from User', callback_data: 'remove_balance' }],
-                [{ text: 'Approve Withdrawal', callback_data: 'approve_withdrawal' }]
+                [{ text: 'Withdraw for Admin', callback_data: 'withdraw_admin' }],
+                [{ text: 'Allow User to Withdraw', callback_data: 'allow_withdrawal' }]
             ]
         }
     };
-    bot.sendMessage(chatId, 'Admin Commands:', inlineKeyboard);
+
+    bot.sendMessage(chatId, 'Choose an admin action:', adminInlineKeyboard);
 });
 
-// Admin - Add Balance to User
+// Add balance to user
 bot.on('callback_query', (query) => {
     const chatId = query.message.chat.id;
     const userId = query.from.id;
@@ -206,29 +189,6 @@ bot.on('callback_query', (query) => {
 
                 userData[userToAdd].balance += amountToAdd;
                 bot.sendMessage(chatId, `Successfully added ${amountToAdd} CWAVE to user ${userToAdd}.`);
-            });
-        });
-    } else if (data === 'remove_balance') {
-        bot.sendMessage(chatId, 'Please enter the user ID to remove balance from:');
-        bot.once('message', (msg) => {
-            const userToRemove = msg.text.trim();
-
-            // Check if user exists in userData
-            if (!userData[userToRemove]) {
-                bot.sendMessage(chatId, 'User not found.');
-                return;
-            }
-
-            bot.sendMessage(chatId, 'Please enter the amount to remove:');
-            bot.once('message', (msg) => {
-                const amountToRemove = parseFloat(msg.text);
-                if (isNaN(amountToRemove) || amountToRemove <= 0 || amountToRemove > userData[userToRemove].balance) {
-                    bot.sendMessage(chatId, 'Invalid amount. Please enter a valid number.');
-                    return;
-                }
-
-                userData[userToRemove].balance -= amountToRemove;
-                bot.sendMessage(chatId, `Successfully removed ${amountToRemove} CWAVE from user ${userToRemove}.`);
             });
         });
     }
