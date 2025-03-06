@@ -102,14 +102,25 @@ bot.on('callback_query', (query) => {
 
         // Hakikisha mtumiaji ameweka wallet
         if (!userData[userId] || !userData[userId].wallet) {
-            const setWalletKeyboard = {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: '🔑 Set Wallet', callback_data: 'set_wallet' }]
-                    ]
+            bot.sendMessage(chatId, 'Tafadhali weka anwani yako ya Polygon/Ethereum wallet (inatangulia na 0x na kuwa na tarakimu 64):');
+            bot.once('message', (msg) => {
+                const walletAddress = msg.text;
+
+                // Hakikisha anwani ni sahihi
+                if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+                    bot.sendMessage(chatId, 'Anwani ya wallet si sahihi. Tafadhali weka anwani sahihi.');
+                    return;
                 }
-            };
-            bot.sendMessage(chatId, 'Tafadhali weka anwani yako ya Polygon/Ethereum wallet (inatangulia na 0x na kuwa na tarakimu 64):', setWalletKeyboard);
+
+                // Hifadhi anwani ya wallet
+                if (!userData[userId]) {
+                    userData[userId] = { balance: 0, referrals: 0 };
+                }
+                userData[userId].wallet = walletAddress;
+
+                // Rudisha kwenye menyu kuu
+                bot.sendMessage(chatId, 'Wallet yako imewekwa kikamilifu.', mainMenu);
+            });
             return;
         }
 
@@ -137,65 +148,27 @@ bot.on('callback_query', (query) => {
                 return;
             }
 
-            // Tuma inline keyboard ya kuthibitisha withdrawal
-            const confirmWithdrawalKeyboard = {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: '✅ Confirm Withdrawal', callback_data: `confirm_withdraw_${amount}` }],
-                        [{ text: '❌ Cancel', callback_data: 'cancel_withdraw' }]
-                    ]
+            // Fanya withdrawal
+            const userWallet = userData[userId].wallet;
+            (async () => {
+                try {
+                    const tx = await projectWallet.sendTransaction({
+                        to: userWallet,
+                        value: Utils.parseEther(amount.toString())
+                    });
+                    await tx.wait(); // Subiri miamala ikamilike
+                    userData[userId].balance -= amount;
+                    bot.sendMessage(chatId, `Umefanikiwa kutoa ${amount} CWAVE. TX Hash: ${tx.hash}`);
+                } catch (err) {
+                    console.error('Kosa:', err);
+                    bot.sendMessage(chatId, 'Imeshindwa kufanya withdrawal. Tafadhali jaribu tena baadaye.');
                 }
-            };
-            bot.sendMessage(chatId, `Je, unataka kutoa ${amount} CWAVE?`, confirmWithdrawalKeyboard);
+            })();
         });
     } else if (data === 'generate_referral') {
         // Tuma referral link kwa mtumiaji
         const referralLink = `https://t.me/CashWaveTokenBot?start=${userId}`;
         bot.sendMessage(chatId, `Kiungo chako cha kumwalika mtu: ${referralLink}`);
-    } else if (data === 'set_wallet') {
-        // Uliza anwani ya wallet
-        bot.sendMessage(chatId, 'Weka anwani yako ya Polygon/Ethereum wallet (inatangulia na 0x na kuwa na tarakimu 64):');
-        bot.once('message', (msg) => {
-            const walletAddress = msg.text;
-
-            // Hakikisha anwani ni sahihi
-            if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-                bot.sendMessage(chatId, 'Anwani ya wallet si sahihi. Tafadhali weka anwani sahihi.');
-                return;
-            }
-
-            // Hifadhi anwani ya wallet
-            if (!userData[userId]) {
-                userData[userId] = { balance: 0, referrals: 0 };
-            }
-            userData[userId].wallet = walletAddress;
-
-            // Rudisha kwenye menyu kuu
-            bot.sendMessage(chatId, 'Wallet yako imewekwa kikamilifu.', mainMenu);
-        });
-    } else if (data.startsWith('confirm_withdraw_')) {
-        // Fanya withdrawal
-        const amount = parseFloat(data.split('_')[2]);
-        const userWallet = userData[userId].wallet;
-
-        // Fanya miamala kwa kutumia Alchemy API
-        (async () => {
-            try {
-                const tx = await projectWallet.sendTransaction({
-                    to: userWallet,
-                    value: Utils.parseEther(amount.toString())
-                });
-                await tx.wait(); // Subiri miamala ikamilike
-                userData[userId].balance -= amount;
-                bot.sendMessage(chatId, `Umefanikiwa kutoa ${amount} CWAVE. TX Hash: ${tx.hash}`);
-            } catch (err) {
-                console.error('Kosa:', err);
-                bot.sendMessage(chatId, 'Imeshindwa kufanya withdrawal. Tafadhali jaribu tena baadaye.');
-            }
-        })();
-    } else if (data === 'cancel_withdraw') {
-        // Ghairi withdrawal
-        bot.sendMessage(chatId, 'Umeghairi withdrawal.', mainMenu);
     }
 });
 
