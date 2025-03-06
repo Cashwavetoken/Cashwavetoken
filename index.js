@@ -34,7 +34,7 @@ bot.onText(/\/start/, (msg) => {
 
     // Initialize user data if not present
     if (!userData[userId]) {
-        userData[userId] = { balance: 0, referrals: 0, wallet: null };
+        userData[userId] = { balance: 0, referrals: 0, wallet: null, allowWithdrawal: false };
     }
 
     // Send inline keyboard with wallet setup option
@@ -134,81 +134,81 @@ bot.on('callback_query', (query) => {
     }
 });
 
-// Helper function to generate a unique invite link
-function generateInviteLink(userId) {
-    return `https://t.me/CashWaveTokenbot?start=${userId}`;
-}
+// Admin Command - Add Balance
+bot.onText(/\/admin/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
 
-// Handle withdrawal confirmation or rejection
+    // Check if the user is the admin
+    if (userId === ADMIN_ID) {
+        const inlineKeyboard = {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Add Balance to User', callback_data: 'add_balance' }],
+                    [{ text: 'Remove Balance from User', callback_data: 'remove_balance' }],
+                    [{ text: 'Allow Withdrawal Without Referrals', callback_data: 'allow_without_referrals' }],
+                ]
+            }
+        };
+
+        bot.sendMessage(chatId, 'Admin Commands:', inlineKeyboard);
+    } else {
+        bot.sendMessage(chatId, 'You do not have access to this command.');
+    }
+});
+
+// Handle admin commands like add balance, remove balance, etc.
 bot.on('callback_query', (query) => {
     const chatId = query.message.chat.id;
     const userId = query.from.id;
     const data = query.data;
 
-    if (data === 'confirm_withdraw') {
-        // Proceed with withdrawal logic here
-        const balance = userData[userId].balance;
-
-        // Simulate withdrawal logic here (e.g., interact with Alchemy or your contract)
-        // For now, we'll mock a successful transaction
-        const withdrawalAmount = balance;
-
-        // Reset balance after withdrawal
-        userData[userId].balance = 0;
-
-        bot.sendMessage(chatId, `Your withdrawal of ${withdrawalAmount} CWAVE has been processed. Your new balance is 0 CWAVE.`);
-
-        // Here you would integrate with your contract to process the actual withdrawal
-        // Use Alchemy or any other API for transaction processing
-
-    } else if (data === 'reject_withdraw') {
-        // Reject withdrawal and return to main menu
-        bot.sendMessage(chatId, 'Withdrawal rejected. Returning to main menu.');
-
-        const inlineKeyboard = {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: '💰 Balance', callback_data: 'balance' }],
-                    [{ text: '💸 Withdraw', callback_data: 'withdraw' }],
-                    [{ text: '👥 Referrals', callback_data: 'referrals' }],
-                    [{ text: '🔗 Invite Link', callback_data: 'invite_link' }]
-                ]
-            }
-        };
-        bot.sendMessage(chatId, 'Choose an option:', inlineKeyboard);
-    }
-});
-
-// Handle withdraw command and wallet validation
-bot.onText(/\/withdraw/, (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-
-    // Admin can withdraw anytime but still goes through the withdrawal flow
     if (userId === ADMIN_ID) {
-        bot.sendMessage(chatId, 'Admin, please follow the same withdrawal process as other users.');
-    }
+        if (data === 'add_balance') {
+            bot.sendMessage(chatId, 'Enter user ID and the amount to add:');
+            bot.once('message', (msg) => {
+                const [userIdToAdd, amountToAdd] = msg.text.split(' ');
 
-    // Check if the user has set a wallet address
-    if (!userData[userId] || !userData[userId].wallet) {
-        bot.sendMessage(chatId, 'You need to set a wallet address first. Use the "Set Wallet" option to set your address.');
-        return;
-    }
+                // Add balance to user
+                if (userData[userIdToAdd]) {
+                    userData[userIdToAdd].balance += parseFloat(amountToAdd);
+                    bot.sendMessage(chatId, `Successfully added ${amountToAdd} CWAVE to user ${userIdToAdd}.`);
+                } else {
+                    bot.sendMessage(chatId, `User not found.`);
+                }
+            });
+        } else if (data === 'remove_balance') {
+            bot.sendMessage(chatId, 'Enter user ID and the amount to remove:');
+            bot.once('message', (msg) => {
+                const [userIdToRemove, amountToRemove] = msg.text.split(' ');
 
-    // Check if the balance is sufficient for withdrawal (e.g., minimum 1500 CWAVE)
-    const balance = userData[userId].balance || 0;
-    if (balance < 1500) {
-        bot.sendMessage(chatId, 'Your balance is too low for withdrawal. Minimum withdrawal amount is 1500 CWAVE. Please invite more friends to earn CWAVE.');
-        return;
-    }
+                // Remove balance from user
+                if (userData[userIdToRemove]) {
+                    userData[userIdToRemove].balance -= parseFloat(amountToRemove);
+                    bot.sendMessage(chatId, `Successfully removed ${amountToRemove} CWAVE from user ${userIdToRemove}.`);
+                } else {
+                    bot.sendMessage(chatId, `User not found.`);
+                }
+            });
+        } else if (data === 'allow_without_referrals') {
+            bot.sendMessage(chatId, 'Enter user ID to allow withdrawal without 10 referrals:');
+            bot.once('message', (msg) => {
+                const userIdToAllow = msg.text.trim();
 
-    // Prompt user to confirm withdrawal
-    bot.sendMessage(chatId, `You have ${balance} CWAVE available for withdrawal. Is this correct?`, {
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: 'Confirm Withdrawal', callback_data: 'confirm_withdraw' }],
-                [{ text: 'Reject Withdrawal', callback_data: 'reject_withdraw' }]
-            ]
+                // Allow withdrawal without referrals for a user
+                if (userData[userIdToAllow]) {
+                    userData[userIdToAllow].allowWithdrawal = true;
+                    bot.sendMessage(chatId, `User ${userIdToAllow} is now allowed to withdraw without 10 referrals.`);
+                } else {
+                    bot.sendMessage(chatId, `User not found.`);
+                }
+            });
         }
-    });
+    }
 });
+
+// Helper function to generate a unique invite link
+function generateInviteLink(userId) {
+    return `https://t.me/CashWaveTokenbot?start=${userId}`;
+}
+
