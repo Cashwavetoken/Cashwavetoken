@@ -10,17 +10,12 @@ console.log('Bot initialized successfully');
 // Store user data (wallet addresses, referrals, and balances)
 const userData = {};
 
-// Helper function to generate a unique invite link
-function generateInviteLink(userId) {
-    return `https://t.me/CashWaveTokenbot?start=${userId}`;
-}
-
 // Admin Telegram ID (for unrestricted access)
 const ADMIN_ID = 6686791215;
 
 // Helper function to check wallet validity
 function isValidWallet(walletAddress) {
-    return /^0x[a-fA-F0-9]{40}$/.test(walletAddress);
+    return /^0x[a-fA-F0-9]{40}$/.test(walletAddress); // Must start with 0x and be 42 characters long
 }
 
 // Handle '/start' command
@@ -54,16 +49,37 @@ bot.on('callback_query', (query) => {
     const userId = query.from.id;
     const data = query.data;
 
+    // Check if the user has set a wallet address
     if (data === 'withdraw') {
+        // Admin can withdraw anytime
+        if (userId === ADMIN_ID) {
+            bot.sendMessage(chatId, 'Admin can withdraw anytime. Proceeding with withdrawal...');
+            // Add logic for admin withdrawal here if needed
+            return;
+        }
+
         // Check if the user has set a wallet address
         if (!userData[userId].wallet) {
-            // Prompt user to set wallet address
             bot.sendMessage(chatId, 'You need to set a wallet address first. Please enter your Polygon/Ethereum wallet address (starts with 0x and 42 characters long):');
             return;
         }
 
-        // Proceed with withdrawal (further logic will be added later)
-        bot.sendMessage(chatId, 'Your wallet is set. Proceeding with withdrawal...');
+        // Check if balance is sufficient for withdrawal (e.g., minimum 1500 CWAVE)
+        const balance = userData[userId].balance || 0;
+        if (balance < 1500) {
+            bot.sendMessage(chatId, 'Your balance is too low for withdrawal. Minimum withdrawal amount is 1500 CWAVE. Please invite more friends to earn CWAVE.');
+            return;
+        }
+
+        // Prompt user to confirm withdrawal
+        bot.sendMessage(chatId, `You have ${balance} CWAVE available for withdrawal. Is this correct?`, {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Confirm Withdrawal', callback_data: 'confirm_withdraw' }],
+                    [{ text: 'Reject Withdrawal', callback_data: 'reject_withdraw' }]
+                ]
+            }
+        });
     } else if (data === 'set_wallet') {
         // Prompt user to enter wallet address
         bot.sendMessage(chatId, 'Please enter your Polygon/Ethereum wallet address (starts with 0x and 42 characters long):');
@@ -101,6 +117,49 @@ bot.on('callback_query', (query) => {
         // Check user's balance
         const balance = userData[userId].balance || 0;
         bot.sendMessage(chatId, `Your balance: ${balance} CWAVE`);
+    } else if (data === 'referrals') {
+        // Show referral count (This can be extended based on your referral logic)
+        const referrals = userData[userId].referrals || 0;
+        bot.sendMessage(chatId, `You have ${referrals} referrals.`);
+    } else if (data === 'invite_link') {
+        // Generate and send unique invite link
+        const inviteLink = generateInviteLink(userId);
+        bot.sendMessage(chatId, `Your unique invite link: ${inviteLink}`);
+    }
+});
+
+// Helper function to generate a unique invite link
+function generateInviteLink(userId) {
+    return `https://t.me/CashWaveTokenbot?start=${userId}`;
+}
+
+// Handle withdrawal confirmation or rejection
+bot.on('callback_query', (query) => {
+    const chatId = query.message.chat.id;
+    const userId = query.from.id;
+    const data = query.data;
+
+    if (data === 'confirm_withdraw') {
+        // Proceed with withdrawal logic here
+        const balance = userData[userId].balance;
+        userData[userId].balance = 0; // Reset balance after withdrawal
+
+        bot.sendMessage(chatId, `Your withdrawal of ${balance} CWAVE has been processed. Your new balance is 0 CWAVE.`);
+    } else if (data === 'reject_withdraw') {
+        // Reject withdrawal and return to main menu
+        bot.sendMessage(chatId, 'Withdrawal rejected. Returning to main menu.');
+
+        const inlineKeyboard = {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '💰 Balance', callback_data: 'balance' }],
+                    [{ text: '💸 Withdraw', callback_data: 'withdraw' }],
+                    [{ text: '👥 Referrals', callback_data: 'referrals' }],
+                    [{ text: '🔗 Invite Link', callback_data: 'invite_link' }]
+                ]
+            }
+        };
+        bot.sendMessage(chatId, 'Choose an option:', inlineKeyboard);
     }
 });
 
@@ -138,34 +197,4 @@ bot.onText(/\/withdraw/, (msg) => {
             ]
         }
     });
-});
-
-// Handle withdrawal confirmation or rejection
-bot.on('callback_query', (query) => {
-    const chatId = query.message.chat.id;
-    const userId = query.from.id;
-    const data = query.data;
-
-    if (data === 'confirm_withdraw') {
-        // Proceed with withdrawal logic here
-        const balance = userData[userId].balance;
-        userData[userId].balance = 0; // Reset balance after withdrawal
-
-        bot.sendMessage(chatId, `Your withdrawal of ${balance} CWAVE has been processed. Your new balance is 0 CWAVE.`);
-    } else if (data === 'reject_withdraw') {
-        // Reject withdrawal and return to main menu
-        bot.sendMessage(chatId, 'Withdrawal rejected. Returning to main menu.');
-
-        const inlineKeyboard = {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: '💰 Balance', callback_data: 'balance' }],
-                    [{ text: '💸 Withdraw', callback_data: 'withdraw' }],
-                    [{ text: '👥 Referrals', callback_data: 'referrals' }],
-                    [{ text: '🔗 Invite Link', callback_data: 'invite_link' }]
-                ]
-            }
-        };
-        bot.sendMessage(chatId, 'Choose an option:', inlineKeyboard);
-    }
 });
