@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const ethers = require('ethers');
 require('dotenv').config();
 
-// Weka vigezo kutoka kwenye faili ya .env
+// Weka vigezo kutoka kwenye mazingira ya Heroku
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const alchemyApiKey = process.env.ALCHEMY_API_KEY;
 const walletAddress = process.env.WALLET_ADDRESS;
@@ -13,7 +13,7 @@ const alchemyUrl = process.env.ALCHEMY_URL;
 
 // Hakikisha vigezo vipo
 if (!token || !alchemyApiKey || !walletAddress || !privateKey || !contractAddress || !alchemyUrl) {
-    console.error('Tafadhali hakikisha faili ya .env ina vigezo vyote vinavyohitajika.');
+    console.error('Tafadhali hakikisha vigezo vya mazingira vimewekwa kwenye Heroku.');
     process.exit(1);
 }
 
@@ -130,4 +130,10 @@ bot.on('message', (msg) => {
 bot.onText(/\/help/, (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, 'Maelekezo ya kutumia bot:\n\n/start - Anza kutumia bot\n/withdraw <amount> - Toa tokeni\n/help - Pata msaada');
+});
+
+// Anzisha seva
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Seva inasikiliza kwenye port ${port}`);
 });
