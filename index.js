@@ -1,34 +1,99 @@
-﻿const { Network, Alchemy } = require('alchemy-sdk');
+﻿require('dotenv').config();
+const TelegramBot = require('node-telegram-bot-api');
+const { ethers } = require('ethers');
 
-// Load environment variables or use fallback values
-const alchemyApiKey = process.env.ALCHEMY_API_KEY || '_W2qlqzTbRsKSgmIiy_fFeeWqsyOX7K7'; // Replace with your API key
-const alchemyUrl = process.env.ALCHEMY_URL || 'https://polygon-mainnet.g.alchemy.com/v2/_W2qlqzTbRsKSgmIiy_fFeeWqsyOX7K7'; // Replace with your Alchemy URL
+// Weka vigezo vya mazingira
+const {
+  TELEGRAM_BOT_TOKEN,
+  ALCHEMY_API_KEY,
+  WALLET_ADDRESS,
+  PRIVATE_KEY,
+  CONTRACT_ADDRESS,
+  ALCHEMY_URL,
+} = process.env;
 
-// Ensure the environment variables are set
-if (!alchemyApiKey || !alchemyUrl) {
-    console.error('Please ensure the environment variables are properly set.');
-    process.exit(1);
-}
+// Anzisha Telegram Bot
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Initialize Alchemy settings
-const settings = {
-    apiKey: alchemyApiKey,
-    network: Network.MATIC_MAINNET, // Use Polygon Mainnet
-    url: alchemyUrl,
-};
-const alchemy = new Alchemy(settings);
+// Anzisha Alchemy Provider
+const provider = new ethers.providers.JsonRpcProvider(ALCHEMY_URL);
+const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
 
-// Try connecting and fetching data from Alchemy
-(async () => {
-    try {
-        // Get the current block number
-        const blockNumber = await alchemy.core.getBlockNumber();
-        console.log('Current block number:', blockNumber);
+// ABI ya Token (Mfano: ERC-20 Token)
+const ERC20_ABI = [
+  "function balanceOf(address owner) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+];
 
-        // Fetch block details for the current block
-        const block = await alchemy.core.getBlock(blockNumber);
-        console.log('Block details:', block);
-    } catch (err) {
-        console.error('Error connecting to Alchemy:', err.message);
-    }
-})();
+// Anzisha contract ya token
+const tokenContract = new ethers.Contract(CONTRACT_ADDRESS, ERC20_ABI, wallet);
+
+// Hifadhi taarifa za watumiaji
+const users = {};
+
+// Command: /start
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, 'Karibu kwenye Auto-Pay Bot! Tumia /help kuona maagizo.');
+});
+
+// Command: /help
+bot.onText(/\/help/, (msg) => {
+  const chatId = msg.chat.id;
+  const helpText = `
+Maagizo:
+1. /balance - Angalia balance yako
+2. /withdraw <amount> <address> - Toa token kwenye anwani yako
+3. /admin_add <user_id> <amount> - (Admin) Ongeza balance kwa mtumiaji
+  `;
+  bot.sendMessage(chatId, helpText);
+});
+
+// Command: /balance
+bot.onText(/\/balance/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userBalance = users[chatId]?.balance || 0;
+  bot.sendMessage(chatId, `Balance yako ni: ${userBalance} tokens`);
+});
+
+// Command: /withdraw <amount> <address>
+bot.onText(/\/withdraw (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const [amount, address] = match[1].split(' ');
+
+  if (!users[chatId] || users[chatId].balance < parseFloat(amount)) {
+    return bot.sendMessage(chatId, 'Balance yako haitoshi au haujasajiliwa.');
+  }
+
+  try {
+    const tx = await tokenContract.transfer(address, ethers.utils.parseUnits(amount, 18));
+    await tx.wait();
+    users[chatId].balance -= parseFloat(amount);
+    bot.sendMessage(chatId, `Umefanikiwa kutuma ${amount} tokens kwenye ${address}. TX Hash: ${tx.hash}`);
+  } catch (err) {
+    bot.sendMessage(chatId, 'Kosa wakati wa kutuma token: ' + err.message);
+  }
+});
+
+// Command: /admin_add <user_id> <amount> (Admin Only)
+bot.onText(/\/admin_add (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  const [userId, amount] = match[1].split(' ');
+
+  // Hakikisha ni admin
+  if (chatId.toString() !== process.env.ADMIN_CHAT_ID) {
+    return bot.sendMessage(chatId, 'Huna ruhusa ya kufanya hivyo.');
+  }
+
+  if (!users[userId]) {
+    users[userId] = { balance: 0 };
+  }
+  users[userId].balance += parseFloat(amount);
+  bot.sendMessage(chatId, `Umefanikiwa kuongeza ${amount} tokens kwa mtumiaji ${userId}.`);
+});
+
+// Anzisha server kwa Heroku
+const PORT = process.env.PORT || 3000;
+bot.on('polling_error', (error) => {
+  console.error('Polling error:', error);
+});
