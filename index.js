@@ -1,99 +1,90 @@
 ﻿require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
+const { Alchemy, Network } = require('alchemy-sdk');
 const { ethers } = require('ethers');
 
-// Weka vigezo vya mazingira
-const {
-  TELEGRAM_BOT_TOKEN,
-  ALCHEMY_API_KEY,
-  WALLET_ADDRESS,
-  PRIVATE_KEY,
-  CONTRACT_ADDRESS,
-  ALCHEMY_URL,
-} = process.env;
+// Initialize Telegram Bot
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Anzisha Telegram Bot
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+// Initialize Alchemy API
+const alchemy = new Alchemy({
+    apiKey: process.env.ALCHEMY_API_KEY,
+    network: Network.MATIC_MAINNET,  // Use Polygon mainnet
+});
 
-// Anzisha Alchemy Provider
-const provider = new ethers.providers.JsonRpcProvider(ALCHEMY_URL);
-const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+// Initialize Ethereum wallet (to sign transactions)
+const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_URL);
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
-// ABI ya Token (Mfano: ERC-20 Token)
-const ERC20_ABI = [
-  "function balanceOf(address owner) view returns (uint256)",
-  "function transfer(address to, uint256 amount) returns (bool)",
-];
+// Admin wallet address
+const adminAddress = process.env.WALLET_ADDRESS;
 
-// Anzisha contract ya token
-const tokenContract = new ethers.Contract(CONTRACT_ADDRESS, ERC20_ABI, wallet);
+// Contract address (if interacting with a token contract)
+const contractAddress = process.env.CONTRACT_ADDRESS;
 
-// Hifadhi taarifa za watumiaji
-const users = {};
-
-// Command: /start
+// Define a basic command for the bot
 bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, 'Karibu kwenye Auto-Pay Bot! Tumia /help kuona maagizo.');
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, 'Welcome to the AutoPay Bot! Use /balance to check your balance.');
 });
 
-// Command: /help
-bot.onText(/\/help/, (msg) => {
-  const chatId = msg.chat.id;
-  const helpText = `
-Maagizo:
-1. /balance - Angalia balance yako
-2. /withdraw <amount> <address> - Toa token kwenye anwani yako
-3. /admin_add <user_id> <amount> - (Admin) Ongeza balance kwa mtumiaji
-  `;
-  bot.sendMessage(chatId, helpText);
-});
-
-// Command: /balance
+// Get user's balance
 bot.onText(/\/balance/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userBalance = users[chatId]?.balance || 0;
-  bot.sendMessage(chatId, `Balance yako ni: ${userBalance} tokens`);
+    const chatId = msg.chat.id;
+    
+    // Fetch user balance (for example purposes, checking balance from the admin wallet)
+    const balance = await provider.getBalance(adminAddress);
+    const formattedBalance = ethers.utils.formatEther(balance);
+    
+    bot.sendMessage(chatId, `Your current balance is: ${formattedBalance} MATIC`);
 });
 
-// Command: /withdraw <amount> <address>
-bot.onText(/\/withdraw (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const [amount, address] = match[1].split(' ');
+// Command for admin to distribute tokens
+bot.onText(/\/distribute (\d+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const amount = match[1]; // Amount to distribute in MATIC
 
-  if (!users[chatId] || users[chatId].balance < parseFloat(amount)) {
-    return bot.sendMessage(chatId, 'Balance yako haitoshi au haujasajiliwa.');
-  }
+    // Ensure the user is an admin (check user ID)
+    if (msg.from.id !== YOUR_ADMIN_ID) {
+        bot.sendMessage(chatId, 'You are not authorized to perform this action.');
+        return;
+    }
 
-  try {
-    const tx = await tokenContract.transfer(address, ethers.utils.parseUnits(amount, 18));
-    await tx.wait();
-    users[chatId].balance -= parseFloat(amount);
-    bot.sendMessage(chatId, `Umefanikiwa kutuma ${amount} tokens kwenye ${address}. TX Hash: ${tx.hash}`);
-  } catch (err) {
-    bot.sendMessage(chatId, 'Kosa wakati wa kutuma token: ' + err.message);
-  }
+    const recipient = 'USER_WALLET_ADDRESS'; // Replace with actual user address
+    const tx = {
+        to: recipient,
+        value: ethers.utils.parseEther(amount),
+    };
+
+    // Sign and send the transaction
+    try {
+        const txResponse = await wallet.sendTransaction(tx);
+        await txResponse.wait();
+        bot.sendMessage(chatId, `Successfully distributed ${amount} MATIC to ${recipient}`);
+    } catch (error) {
+        console.error(error);
+        bot.sendMessage(chatId, 'Error distributing funds.');
+    }
 });
 
-// Command: /admin_add <user_id> <amount> (Admin Only)
-bot.onText(/\/admin_add (.+)/, (msg, match) => {
-  const chatId = msg.chat.id;
-  const [userId, amount] = match[1].split(' ');
+// Withdraw funds command for users
+bot.onText(/\/withdraw (\d+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const amount = match[1]; // Amount to withdraw
 
-  // Hakikisha ni admin
-  if (chatId.toString() !== process.env.ADMIN_CHAT_ID) {
-    return bot.sendMessage(chatId, 'Huna ruhusa ya kufanya hivyo.');
-  }
+    const userAddress = 'USER_WALLET_ADDRESS'; // Get the user's wallet address from msg or a database
 
-  if (!users[userId]) {
-    users[userId] = { balance: 0 };
-  }
-  users[userId].balance += parseFloat(amount);
-  bot.sendMessage(chatId, `Umefanikiwa kuongeza ${amount} tokens kwa mtumiaji ${userId}.`);
-});
+    const tx = {
+        to: userAddress,
+        value: ethers.utils.parseEther(amount),
+    };
 
-// Anzisha server kwa Heroku
-const PORT = process.env.PORT || 3000;
-bot.on('polling_error', (error) => {
-  console.error('Polling error:', error);
+    try {
+        const txResponse = await wallet.sendTransaction(tx);
+        await txResponse.wait();
+        bot.sendMessage(chatId, `Withdrawal of ${amount} MATIC sent to ${userAddress}`);
+    } catch (error) {
+        console.error(error);
+        bot.sendMessage(chatId, 'Error processing withdrawal.');
+    }
 });
