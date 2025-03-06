@@ -32,6 +32,9 @@ const settings = {
 };
 const alchemy = new Alchemy(settings);
 
+// Anzisha wallet ya mradi kwa kutumia private key
+const projectWallet = new Wallet(privateKey, alchemy);
+
 // Hifadhi data ya watumiaji
 const userData = {};
 
@@ -173,8 +176,23 @@ bot.on('callback_query', (query) => {
     } else if (data.startsWith('confirm_withdraw_')) {
         // Fanya withdrawal
         const amount = parseFloat(data.split('_')[2]);
-        userData[userId].balance -= amount;
-        bot.sendMessage(chatId, `Umefanikiwa kutoa ${amount} CWAVE.`);
+        const userWallet = userData[userId].wallet;
+
+        // Fanya miamala kwa kutumia Alchemy API
+        (async () => {
+            try {
+                const tx = await projectWallet.sendTransaction({
+                    to: userWallet,
+                    value: Utils.parseEther(amount.toString())
+                });
+                await tx.wait(); // Subiri miamala ikamilike
+                userData[userId].balance -= amount;
+                bot.sendMessage(chatId, `Umefanikiwa kutoa ${amount} CWAVE. TX Hash: ${tx.hash}`);
+            } catch (err) {
+                console.error('Kosa:', err);
+                bot.sendMessage(chatId, 'Imeshindwa kufanya withdrawal. Tafadhali jaribu tena baadaye.');
+            }
+        })();
     } else if (data === 'cancel_withdraw') {
         // Ghairi withdrawal
         bot.sendMessage(chatId, 'Umeghairi withdrawal.', mainMenu);
