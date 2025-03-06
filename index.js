@@ -1,12 +1,12 @@
 const { Alchemy, Network, Wallet, Utils } = require('alchemy-sdk');
 const TelegramBot = require('node-telegram-bot-api');
-const express = require('express'); // Added express for server setup
+const express = require('express');
 require('dotenv').config();
 
 // Initialize express app
 const app = express();
 
-// Weka vigezo kutoka kwenye mazingira ya Heroku
+// Load environment variables
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const alchemyApiKey = process.env.ALCHEMY_API_KEY;
 const walletAddress = process.env.WALLET_ADDRESS;
@@ -14,129 +14,128 @@ const privateKey = process.env.PRIVATE_KEY;
 const contractAddress = process.env.CONTRACT_ADDRESS;
 const alchemyUrl = process.env.ALCHEMY_URL;
 
-// Hakikisha vigezo vipo
+// Validate environment variables
 if (!token || !alchemyApiKey || !walletAddress || !privateKey || !contractAddress || !alchemyUrl) {
-    console.error('Tafadhali hakikisha vigezo vya mazingira vimewekwa kwenye Heroku.');
+    console.error('Please ensure all environment variables are set in Heroku.');
     process.exit(1);
 }
 
-// Anzisha bot bila proxy
-const bot = new TelegramBot(token, {
-    polling: true, // Tumia polling badala ya webhooks
-});
+// Initialize Telegram bot
+const bot = new TelegramBot(token, { polling: true });
 
-// Weka mazingira ya Alchemy
+// Initialize Alchemy
 const settings = {
     apiKey: alchemyApiKey,
     network: Network.MATIC_MAINNET,
     url: alchemyUrl,
 };
-
 const alchemy = new Alchemy(settings);
 
-// Anzisha wallet kwa kutumia private key
+// Initialize wallet
 const wallet = new Wallet(privateKey, alchemy);
 
-// Hifadhi salio kwa kila mtumiaji
-const userBalances = {};
+// Store user data (wallet addresses and balances)
+const userData = {};
 
-// Weka ID ya admin (badilisha na ID yako ya Telegram)
-const ADMIN_ID = 6686791215; // Weka ID yako ya Telegram hapa
+// Admin ID (replace with your Telegram ID)
+const ADMIN_ID = 6686791215;
 
-// Msimbo wa kusimamia mazungumzo ya bot
+// Helper function to generate a unique invite link
+function generateInviteLink(userId) {
+    return `https://t.me/your_bot_username?start=${userId}`;
+}
+
+// Start command
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const username = msg.from.username || 'No Username';
 
-    // Tuma ujumbe kwa admin
-    bot.sendMessage(ADMIN_ID, `Mtumiaji mpya amejiunga:\nID: ${userId}\nUsername: @${username}`);
+    // Notify admin about new user
+    bot.sendMessage(ADMIN_ID, `New user joined:\nID: ${userId}\nUsername: @${username}`);
 
-    // Kusoma salio la wallet
-    alchemy.core.getTokenBalances(walletAddress, [contractAddress]).then((response) => {
-        const balance = response.tokenBalances[0].tokenBalance;
-        const formattedBalance = balance / 1e18; // Gawanya kwa decimals ya tokeni
-        bot.sendMessage(chatId, `Salio la wallet: ${formattedBalance} tokeni`);
-    }).catch((err) => {
-        console.error('Hitilafu:', err);
-        bot.sendMessage(chatId, 'Kuna hitilafu katika kusoma salio. Tafadhali jaribu tena baadaye.');
-    });
+    // Send inline keyboard
+    const inlineKeyboard = {
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '?? Balance', callback_data: 'balance' }],
+                [{ text: '?? Withdraw', callback_data: 'withdraw' }],
+                [{ text: '?? Referrals', callback_data: 'referrals' }],
+                [{ text: '?? Invite Link', callback_data: 'invite_link' }]
+            ]
+        }
+    };
+    bot.sendMessage(chatId, 'Choose an option:', inlineKeyboard);
 });
 
-// Menyu ya admin
-bot.onText(/\/admin/, (msg) => {
-    const chatId = msg.chat.id;
+// Handle inline keyboard callbacks
+bot.on('callback_query', (query) => {
+    const chatId = query.message.chat.id;
+    const userId = query.from.id;
+    const data = query.data;
 
-    if (chatId !== ADMIN_ID) {
-        bot.sendMessage(chatId, 'Huna ruhusa ya kutumia amri hii.');
+    if (data === 'balance') {
+        // Check user's balance
+        alchemy.core.getTokenBalances(walletAddress, [contractAddress]).then((response) => {
+            const balance = response.tokenBalances[0].tokenBalance;
+            const formattedBalance = balance / 1e18; // Adjust for token decimals
+            bot.sendMessage(chatId, `Your balance: ${formattedBalance} tokens`);
+        }).catch((err) => {
+            console.error('Error:', err);
+            bot.sendMessage(chatId, 'Failed to fetch balance. Please try again later.');
+        });
+    } else if (data === 'withdraw') {
+        // Check if user has set a wallet
+        if (!userData[userId] || !userData[userId].wallet) {
+            bot.sendMessage(chatId, 'You need to set a wallet address first. Use /setwallet to set your Polygon Matic or Ethereum wallet.');
+            return;
+        }
+
+        // Prompt user to enter withdrawal amount
+        bot.sendMessage(chatId, 'Enter the amount you want to withdraw:');
+        bot.once('message', (msg) => {
+            const amount = parseFloat(msg.text);
+            if (isNaN(amount) {
+                bot.sendMessage(chatId, 'Invalid amount. Please enter a valid number.');
+                return;
+            }
+
+            // Process withdrawal (this is a placeholder; implement your logic here)
+            bot.sendMessage(chatId, `Withdrawal request for ${amount} tokens has been received.`);
+        });
+    } else if (data === 'referrals') {
+        // Show referral count (placeholder)
+        bot.sendMessage(chatId, 'You have 0 referrals.');
+    } else if (data === 'invite_link') {
+        // Generate and send unique invite link
+        const inviteLink = generateInviteLink(userId);
+        bot.sendMessage(chatId, `Your unique invite link: ${inviteLink}`);
+    }
+});
+
+// Set wallet command
+bot.onText(/\/setwallet (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const walletAddress = match[1];
+
+    // Validate wallet address (basic check)
+    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+        bot.sendMessage(chatId, 'Invalid wallet address. Please provide a valid Polygon Matic or Ethereum wallet address.');
         return;
     }
 
-    // Onyesha menyu ya admin
-    const adminMenu = {
-        reply_markup: {
-            keyboard: [
-                ['Gawa Salio', 'Ondoa Salio'],
-                ['Angalia Salio la Mtumiaji']
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: true
-        }
-    };
-    bot.sendMessage(chatId, 'Chagua kitendo kutoka kwenye menyu ya admin:', adminMenu);
-});
-
-// Kusimamia matendo ya admin
-bot.on('message', (msg) => {
-    const chatId = msg.chat.id;
-    const text = msg.text;
-
-    if (chatId !== ADMIN_ID) return; // Tu admin anaweza kufanya mazungumzo haya
-
-    if (text === 'Gawa Salio') {
-        bot.sendMessage(chatId, 'Tuma ujumbe kwa muundo: "gawa <user_id> <amount>"');
-    } else if (text === 'Ondoa Salio') {
-        bot.sendMessage(chatId, 'Tuma ujumbe kwa muundo: "ondoa <user_id> <amount>"');
-    } else if (text === 'Angalia Salio la Mtumiaji') {
-        bot.sendMessage(chatId, 'Tuma ujumbe kwa muundo: "angalia <user_id>"');
-    } else if (text.startsWith('gawa')) {
-        const [, userId, amount] = text.split(' ');
-        if (!userId || !amount || isNaN(amount)) {
-            bot.sendMessage(chatId, 'Tafadhali tumia muundo sahihi: "gawa <user_id> <amount>"');
-            return;
-        }
-        userBalances[userId] = (userBalances[userId] || 0) + parseFloat(amount);
-        bot.sendMessage(chatId, `Umegawa ${amount} tokeni kwa mtumiaji ${userId}. Salio jipya: ${userBalances[userId]}`);
-    } else if (text.startsWith('ondoa')) {
-        const [, userId, amount] = text.split(' ');
-        if (!userId || !amount || isNaN(amount)) {
-            bot.sendMessage(chatId, 'Tafadhali tumia muundo sahihi: "ondoa <user_id> <amount>"');
-            return;
-        }
-        if (!userBalances[userId] || userBalances[userId] < parseFloat(amount)) {
-            bot.sendMessage(chatId, 'Salio la mtumiaji halitoshi.');
-            return;
-        }
-        userBalances[userId] -= parseFloat(amount);
-        bot.sendMessage(chatId, `Umeondoa ${amount} tokeni kwa mtumiaji ${userId}. Salio jipya: ${userBalances[userId]}`);
-    } else if (text.startsWith('angalia')) {
-        const [, userId] = text.split(' ');
-        if (!userId) {
-            bot.sendMessage(chatId, 'Tafadhali tumia muundo sahihi: "angalia <user_id>"');
-            return;
-        }
-        const balance = userBalances[userId] || 0;
-        bot.sendMessage(chatId, `Salio la mtumiaji ${userId}: ${balance} tokeni`);
+    // Save wallet address
+    if (!userData[userId]) {
+        userData[userId] = {};
     }
+    userData[userId].wallet = walletAddress;
+
+    bot.sendMessage(chatId, `Wallet address set successfully: ${walletAddress}`);
 });
 
-bot.onText(/\/help/, (msg) => {
-    const chatId = msg.chat.id;
-    bot.sendMessage(chatId, 'Maelekezo ya kutumia bot:\n\n/start - Anza kutumia bot\n/withdraw <amount> - Toa tokeni\n/help - Pata msaada');
-});
-
-// Anzisha seva
+// Start server
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-    console.log(`Seva inasikiliza kwenye port ${port}`);
+    console.log(`Server running on port ${port}`);
 });
