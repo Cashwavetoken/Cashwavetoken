@@ -1,0 +1,14 @@
+{
+  "name": "telegram-bot",
+  "version": "1.0.0",
+  "description": "A Telegram bot for Polygon token withdrawals",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "ethers": "^6.0.0",
+    "node-telegram-bot-api": "^0.61.0",
+    "dotenv": "^16.0.0"
+  }
+}
