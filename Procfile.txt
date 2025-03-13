@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 worker: node bot.js
+=======
+web: npm start
+>>>>>>> 756008e223c0e3f6a744d7489f2ae8fda30e4f6c

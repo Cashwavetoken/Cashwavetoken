@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "telegram-bot",
   "version": "1.0.0",
   "description": "A Telegram bot for Polygon token withdrawals",
@@ -12,3 +13,28 @@
     "dotenv": "^16.0.0"
   }
 }
+=======
+  "name": "cashwave-bot",
+  "version": "1.0.0",
+  "description": "A Telegram bot for managing token balances.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "alchemy-sdk": "^3.5.3",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "express": "^4.21.2",
+    "node-telegram-bot-api": "^0.63.0"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
+>>>>>>> 756008e223c0e3f6a744d7489f2ae8fda30e4f6c
