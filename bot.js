@@ -121,7 +121,7 @@ bot.onText(/\/addbalance (.+)/, (msg, match) => {
   const targetUserId = parseInt(args[0]);
   const amount = parseFloat(args[1]);
 
-  if (isNaN(targetUserId) {
+  if (isNaN(targetUserId)) {
     bot.sendMessage(chatId, 'User ID sio sahihi.');
     return;
   }
